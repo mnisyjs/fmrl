@@ -55,7 +55,7 @@ class MADDPG:
     # =========================================================
     # 选择动作
     # =========================================================
-    def select_action(self, obs_list, explore=True, num_samples=1, temperature=0.5):
+    def select_action(self, obs_list, explore=True, temperature=0.5):
         with torch.no_grad():
             state_list = [torch.tensor(obs, dtype=torch.float32, device=self.device).view(1, -1) for obs in obs_list]
 
@@ -69,6 +69,9 @@ class MADDPG:
             if self.args.k_samples == 1:
                 # 单采样时直接合并
                 final_action = torch.cat([cand[:, 0, :] for cand in all_candidates], dim=1)
+                q_selected = torch.tensor(0.0, device=self.device)
+                q_all = torch.tensor([0.0], device=self.device)
+                action_diversity = 0.0
             else:
                 # Step 2: 构造 K 个候选联合动作
                 K = self.args.k_samples
@@ -90,14 +93,19 @@ class MADDPG:
                     q_team = q[:, good_indices].mean(dim=1)  # (1,)
                     q_values.append(q_team)
                 q_values = torch.cat(q_values, dim=0)  # (K,)
+                action_diversity = joint_candidates.std(dim=1).mean().item()
 
                 # Step 4: Softmax 采样（或 argmax）
                 if explore and self.args.k_samples > 1:
                     # 使用温度参数控制 softmax 或直接 argmax
                     probs = torch.softmax(q_values / temperature, dim=0).cpu().numpy()
                     selected_idx = np.random.choice(K, p=probs)  # Softmax 采样
+                    q_selected = q_values[selected_idx]
+                    q_all = q_values
                 else:
                     selected_idx = q_values.argmax(dim=0).item()  # 直接选最优
+                    q_selected = q_values[selected_idx]
+                    q_all = q_values
                 final_action = joint_candidates[:, selected_idx, :]  # (1, total_dim)
 
             # 添加噪声（只在训练阶段使用）
@@ -106,7 +114,7 @@ class MADDPG:
                 final_action = torch.clamp(final_action + noise, 0, 1)
             else:
                 final_action = torch.clamp(final_action, 0, 1)
-        return final_action
+        return final_action, q_selected, q_all, action_diversity
 
 # =========================================================
     # 训练
