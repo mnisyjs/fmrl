@@ -31,11 +31,11 @@ def get_args():
     parser.add_argument("--alpha_diversity_loss", type=float, default=0.01)
     parser.add_argument("--learning_starts", type=int, default=5000)
     parser.add_argument("--k_samples", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=0, help="random seed for reproducibility")
     # Checkpointing
     parser.add_argument("--save-dir", type=str, default="./model", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=2000, help="save model once every time this many episodes are completed")
     parser.add_argument("--model-dir", type=str, default="", help="directory in which training state and model are loaded")
-
     # Evaluate
     parser.add_argument("--evaluate-episodes", type=int, default=10, help="number of episodes for evaluating")
     parser.add_argument("--evaluate-episode-len", type=int, default=100, help="length of episodes for evaluating")
