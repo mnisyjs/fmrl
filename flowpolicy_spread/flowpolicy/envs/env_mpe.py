@@ -7,7 +7,7 @@ def make_env(args):
         max_cycles=25,
         continuous_actions = True
     )
-    env.reset()
+    env.reset(seed=args.seed)
     args.n_agents = len(env.agents)
     print(env.action_space(env.agents[0]))
     # obs / action 维度
