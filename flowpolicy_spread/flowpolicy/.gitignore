@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+
+models/
+results/
+logs/
+
+*.pth
+*.pt
+*.png
+
+.idea/
+.vscode/
+
+wandb/
+runs/
