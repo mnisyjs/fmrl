@@ -56,6 +56,8 @@ class Runner:
         self.adv_reward_history = []
         self.total_reward_history = []
         self.reward_window = []
+        self.critic_gain_history = []
+        self.action_diversity_history = []
         self.reward_debug = {
             "team_env": 0.0,
             "r_lure": 0.0,
@@ -87,7 +89,9 @@ class Runner:
             "deception_rate",  # 新增
             "r_lure",
             "r_occupy",
-            "final_reward"
+            "final_reward",
+            "critic_gain",
+            "action_diversity"
         ]
         self.logger.writerow(header)
         self.last_train_info = {k: 0.0 for k in header if k not in ["episode", "reward"]}
@@ -228,7 +232,11 @@ class Runner:
                 obs_list = [obs[agent] for agent in self.env.agents] # 获取agent的观测存入列表
                 joint_state = np.concatenate(obs_list) # 拼接
 
-                action_tensor = self.maddpg.select_action(obs_list)
+                action_tensor, q_selected, q_all, action_entropy = self.maddpg.select_action(obs_list)
+                critic_gain = ((q_selected - q_all.mean()) / (q_all.std() + 1e-6)).item()
+                self.critic_gain_history.append(critic_gain)
+                self.action_diversity_history.append(action_entropy)
+
                 action = action_tensor.squeeze(0).cpu().detach().numpy() # 一堆动作的集合体
                 action = np.clip(action, 0, 1)
 
@@ -306,6 +314,8 @@ class Runner:
 
             role_consistency = self.episode_role_steps / max(1, num_steps)
             deception_rate = self.episode_deception_steps / max(1, num_steps)
+            mean_gain = np.mean(self.critic_gain_history)
+            mean_entropy = np.mean(self.action_diversity_history)
 
             avg_r_lure = 0
             avg_r_occupy = 0
@@ -343,7 +353,10 @@ class Runner:
 
                     avg_r_lure,
                     avg_r_occupy,
-                    avg_final_reward
+                    avg_final_reward,
+
+                    mean_gain,
+                    mean_entropy
                 ]
                 row = [raw_row[0], *[round(float(x), 3) for x in raw_row[1:]]]
                 self.logger.writerow(row)
@@ -372,7 +385,7 @@ class Runner:
         import matplotlib.pyplot as plt
         import numpy as np
 
-        window = 50
+        window = 200
         good_rewards = np.array(self.good_reward_history)
         adv_rewards = np.array(self.adv_reward_history)
         total_rewards = np.array(self.total_reward_history)
