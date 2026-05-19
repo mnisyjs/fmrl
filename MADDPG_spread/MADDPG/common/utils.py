@@ -33,7 +33,7 @@ def store_args(method):
 
 def make_env(args):
     env = simple_spread_v3.parallel_env(N=3, local_ratio=0.5, max_cycles=25, continuous_actions=True)
-    env.reset()
+    env.reset(seed=args.seed)
 
     args.n_agents = len(env.agents)
     # obs dim
