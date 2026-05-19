@@ -40,22 +40,57 @@ class MADDPG_Baseline:
         self.critic_optim_good = torch.optim.Adam(self.critic_good.parameters(), lr=args.lr_critic)
 
     def select_action(self, obs_list, explore=True, noise_rate=None):
-        """确定性动作输出 + 可选噪声（无 multi‑sample）"""
+        """
+        Deterministic MADDPG action + optional noise
+        (No critic-guided reranking)
+        """
         if noise_rate is None:
             noise_rate = self.args.noise_rate
+
         with torch.no_grad():
             state_list = [torch.tensor(o, dtype=torch.float32, device=self.device).view(1, -1) for o in obs_list]
-            actions = []
-            for i in range(self.n_agents):
-                a = self.actors[i](state_list[i])
-                if explore:
-                    noise = torch.randn_like(a) * noise_rate
-                    a = torch.clamp(a + noise, 0, 1)
-                else:
-                    a = torch.clamp(a, 0, 1)
-                actions.append(a)
-            final_action = torch.cat(actions, dim=1)
-        return final_action
+            # =====================================================
+            # Generate K candidate joint actions
+            # =====================================================
+            joint_candidates = []
+            q_values = []
+            for k in range(self.args.k_samples):
+                actions = []
+                for i in range(self.n_agents):
+                    a = self.actors[i](state_list[i])
+
+                    if explore:
+                        noise = torch.randn_like(a) * noise_rate
+                        a = torch.clamp(a + noise, 0, 1)
+                    else:
+                        a = torch.clamp(a, 0, 1)
+                    actions.append(a)
+
+                joint_action = torch.cat(actions, dim=1)
+                joint_candidates.append(joint_action)
+                obs_cat = torch.cat(state_list, dim=1)
+                q = self.critics[0](obs_cat, joint_action)
+                # team Q
+                q_values.append(q.mean())
+
+            joint_candidates = torch.stack(joint_candidates, dim=1)
+            q_all = torch.stack(q_values)
+
+            if self.args.k_samples > 1:
+                action_diversity = (joint_candidates.std(dim=1).mean().item())  
+            else:
+                action_diversity = 0.0
+
+            # =====================================================
+            # Baseline:
+            # DO NOT use critic reranking
+            # =====================================================
+            selected_idx = 0
+
+            final_action = joint_candidates[:, selected_idx, :]
+            q_selected = q_all[selected_idx]
+
+        return (final_action, q_selected, q_all, action_diversity)
 
     def train(self, replay_buffer, total_step, train_adv=True, train_good=True, update_critic=True):
         # ---------- Critic update 部分与主模型完全相同（抄 original maddpg.py）----------
